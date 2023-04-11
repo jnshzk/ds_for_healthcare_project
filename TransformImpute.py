@@ -3,6 +3,8 @@ import pandas as pd
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
+from tqdm import tqdm
+from sklearn.preprocessing import StandardScaler
 
 class SimpleTransformer(nn.Module):
     def __init__(self, input_size, hidden_size=64, num_layers=2):
@@ -34,11 +36,16 @@ def preprocess_data(data):
     non_numeric_columns = data.select_dtypes(exclude=np.number).columns
 
     # Normalize the numeric columns
+    
+    scaler = StandardScaler().fit(data[numeric_columns])
+    data[numeric_columns] = scaler.transform(data[numeric_columns])
+    '''
     eps = 1e-8  # Small constant to avoid division by zero or too small numbers
     for column in numeric_columns:
         col_min = data[column].min(skipna=True)
         col_max = data[column].max(skipna=True)
         data[column] = (data[column] - col_min) / (col_max - col_min + eps)
+    '''
 
     # Encode the non-numeric columns
     #for i, column in enumerate(non_numeric_columns):
@@ -54,7 +61,8 @@ def preprocess_data(data):
 def mask_random_values(tensor, mask_fraction):
     mask = torch.rand(tensor.shape) < mask_fraction
     masked_tensor = tensor.clone().detach()
-    masked_tensor[mask] = float('nan')
+    #masked_tensor[mask] = float('nan')
+    masked_tensor[mask] = 0
     return masked_tensor, mask
 
 def masked_mse_loss(output, target, mask):
@@ -95,9 +103,9 @@ def main():
         # Training
         model.train()
         total_train_loss = 0
-        for batch in train_loader:
+        for batch in tqdm(train_loader):
             x = batch[0].to(device)
-
+            x = torch.nan_to_num(x)
             # Mask random values in the input data
             masked_x, mask = mask_random_values(x, mask_fraction=0.1)
 
@@ -111,9 +119,9 @@ def main():
                 updated_masked_x[mask] = output[mask]
                 masked_x = updated_masked_x
             
-            print("Input data:", x)
-            print("Masked data:", masked_x)
-            print("Model output:", output)
+            #print("Input data:", x)
+            #print("Masked data:", masked_x)
+            #print("Model output:", output)
 
             # Calculate the loss only for masked values
             train_loss = masked_mse_loss(output, x, mask)
@@ -130,8 +138,9 @@ def main():
         with torch.no_grad():
             for batch in val_loader:
                 x = batch[0].to(device)
-                output = model(x)
                 mask = x.isnan()
+                x = torch.nan_to_num(x)
+                output = model(x)
                 val_loss = masked_mse_loss(output, x, mask)
                 total_val_loss += val_loss.item()
 
@@ -144,8 +153,9 @@ def main():
     with torch.no_grad():
         for batch in test_loader:
             x = batch[0].to(device)
-            output = model(x)
             mask = x.isnan()
+            x = torch.nan_to_num(x)
+            output = model(x)
             test_loss = masked_mse_loss(output, x, mask)
             total_test_loss += test_loss.item()
 
