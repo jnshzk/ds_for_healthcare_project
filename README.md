@@ -9,3 +9,79 @@
 # TODOs
 1. Add model code.
 2. Add experiment logging.
+
+# Usage
+
+1. Create output directory, if not exist.
+```
+mkdir output
+```
+
+2. Generate 20 cross-validation folds.
+```
+python3 -m gen_cv_fold \
+    --spreadsheet data/TADPOLE_D1_D2.csv \
+    --features data/features \
+    --folds 20 \
+    --outdir output
+
+```
+
+3. Create training and test data, model filling
+
+```
+python3 -m gen_cv_pickle \
+    --spreadsheet data/TADPOLE_D1_D2.csv \
+    --features data/features \
+    --mask output/fold0_mask.csv \
+    --strategy model \
+    --batch_size 128 \
+    --out output/test.f0.pkl
+
+python3 -m gen_cv_pickle \
+    --spreadsheet data/TADPOLE_D1_D2.csv \
+    --features data/features \
+    --mask output/fold1_mask.csv \
+    --strategy model \
+    --batch_size 128 \
+    --out output/test.f1.pkl
+```
+
+4. Train MinimalRNN model, first fold
+
+```
+python3 -m train --verbose \
+    --data output/test.f0.pkl \
+    --i_drop 0.1 \
+    --h_drop 0.4 \
+    --h_size 128 \
+    --nb_layers 2 \
+    --epochs 100 --lr 0.001290666 --model MinRNN --weight_decay 1e-5 \
+    --out output/model.f0.pt
+```
+
+5. Train MinimalRNN model, second fold
+```
+python3 -m train --verbose \
+    --data output/test.f1.pkl \
+    --i_drop 0.1 \
+    --h_drop 0.4 \
+    --h_size 128 \
+    --nb_layers 2 \
+    --epochs 100 --lr 0.001333218 --model MinRNN --weight_decay 1e-7 \
+    --out output/model.f1.pt
+```
+
+6. Apply trained model on test set
+```
+python -m predict --checkpoint output/model.f0.pt --data output/test.f0.pkl \
+    -o output/prediction_test.f0.csv
+python -m predict --checkpoint output/model.f1.pt --data output/test.f1.pkl \
+    -o output/prediction_test.f1.csv
+```
+
+7. Evaluate prediction on test set, first fold
+```
+python3 -m evaluation --reference output/fold0_test.csv --prediction output/prediction_test.f0.csv
+python3 -m evaluation --reference output/fold1_test.csv --prediction output/prediction_test.f1.csv
+```
