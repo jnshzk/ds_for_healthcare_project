@@ -22,7 +22,7 @@ def get_data(args, fields):
     """
 
     ret = {}
-    train_mask, pred_mask, pred_mask_frame = misc.get_mask(
+    train_mask, pred_mask, pred_mask_frame = misc.get_mask( # ravi: mask maps row to data split
         args.mask, args.validation)
     ret['baseline'], ret['pred_start'] = misc.get_baseline_prediction_start(
         pred_mask_frame)
@@ -32,11 +32,13 @@ def get_data(args, fields):
     frame = misc.load_table(args.spreadsheet, columns)
 
     tf = frame.loc[train_mask, fields]
-    ret['mean'] = tf.mean()
-    ret['stds'] = tf.std()
+    # ret['mean'] = tf.mean()
+    # ret['stds'] = tf.std()
+    ret['min'] = tf.min()
+    ret['max'] = tf.max() 
     ret['VentICVstd'] = (tf['Ventricles'] / tf['ICV']).std()
 
-    frame[fields] = (frame[fields] - ret['mean']) / ret['stds']
+    frame[fields] = (frame[fields] - ret['min']) / (ret['max']-ret['min'])
 
     default_val = {f: 0. for f in fields}
     default_val['DX'] = 0.

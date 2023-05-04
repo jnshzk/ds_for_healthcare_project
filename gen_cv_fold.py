@@ -31,8 +31,8 @@ def split_by_median_date(data, subjects):
 
 def gen_fold(data, nb_folds, outdir):
     """ Generate *nb_folds* cross-validation folds from *data """
-    subjects = np.unique(data.RID)
-    has_2tp = np.array([np.sum(data.RID == rid) >= 2 for rid in subjects])
+    subjects = np.unique(data.RID)  # 1737
+    has_2tp = np.array([np.sum(data.RID == rid) >= 2 for rid in subjects])  # 1667 people
 
     potential_targets = np.random.permutation(subjects[has_2tp])
     folds = np.array_split(potential_targets, nb_folds)
@@ -51,7 +51,7 @@ def gen_fold(data, nb_folds, outdir):
         test_subj = folds[test_fold]
 
         train_timepoints = (
-            np.in1d(data.RID, train_subj) & data.has_data).astype(int)
+            np.in1d(data.RID, train_subj) & data.has_data).astype(int)  # ravi: where did has_data come from?
         val_in_timepoints, val_out_timepoints = split_by_median_date(
             data, val_subj)
         test_in_timepoints, test_out_timepoints = split_by_median_date(
