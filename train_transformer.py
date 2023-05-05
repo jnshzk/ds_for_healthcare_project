@@ -121,7 +121,15 @@ def train_1epoch(args, model, dataset, optimizer, device):
 
     prev_data = torch.tensor(np.zeros((dataset.batch_size, model.embedder._input_dim, 4)), dtype=torch.float64, device=device)
     for batch in dataset:
+        batch['cat'] = np.moveaxis(batch['cat'], [0, 1], [1, 0])
+        batch['val'] = np.moveaxis(batch['val'], [0, 1], [1, 0])
+        batch['cat_msk'] = np.moveaxis(batch['cat_msk'], [0, 1], [1, 0])
+        batch['val_msk'] = np.moveaxis(batch['val_msk'], [0, 1], [1, 0])
+        batch['true_cat'] = np.moveaxis(batch['true_cat'], [0, 1], [1, 0])
+        batch['true_val'] = np.moveaxis(batch['true_val'], [0, 1], [1, 0])
         for tp, cat, val, cat_m, val_m, t_cat, t_val in zip(batch['tp'], batch['cat'], batch['val'], batch['cat_msk'], batch['val_msk'], batch['true_cat'], batch['true_val']):
+            
+            
             # if len(tp) == 1:
             #     continue
             # if ~cat_m.all():
@@ -132,12 +140,12 @@ def train_1epoch(args, model, dataset, optimizer, device):
             np.nan_to_num(t_val, nan=0, copy=False)
 
             batch_size, feat_cnt = val.shape
-            if batch_size != 128:
-                continue
+            # if batch_size != 128:
+            #     continue
 
             
-            assert feat_cnt == 22
-            assert batch_size == 128
+            # assert feat_cnt == 22
+            # assert batch_size == 128
 
             optimizer.zero_grad()
             cat, val, cat_m, val_m = (to_cat_seq(cat), val, cat_m, val_m)
@@ -174,7 +182,7 @@ def train_1epoch(args, model, dataset, optimizer, device):
 
             # ent = ent_loss(pred_cat, batch['true_cat'][1:], mask_cat)
             # mae = mae_loss(pred_val, batch['true_val'][1:], batch['val_msk'][1:])
-            total_loss = 0*kl + args.w_ent * nll
+            total_loss = kl + args.w_ent * nll
 
             total_loss.backward()
 
