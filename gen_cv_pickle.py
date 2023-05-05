@@ -34,11 +34,11 @@ def get_data(args, fields):
     tf = frame.loc[train_mask, fields]
     # ret['mean'] = tf.mean()
     # ret['stds'] = tf.std()
-    ret['min'] = tf.min()
-    ret['max'] = tf.max() 
+    ret['mean'] = tf.mean()
+    ret['stds'] = tf.std() 
     ret['VentICVstd'] = (tf['Ventricles'] / tf['ICV']).std()
 
-    frame[fields] = (frame[fields] - ret['min']) / (ret['max']-ret['min'])
+    frame[fields] = (frame[fields] - ret['mean']) / ret['stds']
 
     default_val = {f: 0. for f in fields}
     default_val['DX'] = 0.

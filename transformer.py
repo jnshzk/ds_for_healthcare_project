@@ -23,7 +23,7 @@ from feature_embedder import FeatureEmbedder
 
 class Transformer(nn.Module):
 
-    def __init__(self, d_model=16, nhead=2, num_encoder_layers=2,
+    def __init__(self, d_model=48, nhead=2, num_encoder_layers=2,
                  num_decoder_layers=2, dim_feedforward=64, dropout=0.1,
                  activation="relu", normalize_before=False,
                  return_intermediate_dec=False):
@@ -40,7 +40,7 @@ class Transformer(nn.Module):
         self.decoder = TransformerDecoder(decoder_layer, num_decoder_layers, d_model, decoder_norm,
                                           return_intermediate=return_intermediate_dec)
 
-        self.embedder = FeatureEmbedder(23, d_model-4)
+        self.embedder = FeatureEmbedder(128, d_model)
         self._reset_parameters()
 
         self.d_model = d_model
@@ -54,7 +54,7 @@ class Transformer(nn.Module):
     def forward(self, src, query_embed, pos_embed=None, mask=None):
 
         src = self.embedder(src)
-        query_embed = self.embedder(query_embed)
+        # query_embed = self.embedder(query_embed)
         # flatten NxCxHxW to HWxNxC
         bs, _, _ = src.shape
         # src = src.flatten(2).permute(2, 0, 1)
@@ -62,10 +62,10 @@ class Transformer(nn.Module):
         # query_embed = query_embed.unsqueeze(1).repeat(bs, 1, 1)
         # mask = mask.flatten(1)
 
-        tgt = torch.zeros_like(query_embed)
+        tgt = torch.zeros_like(src)
         memory, (mean, logvar) = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
         dec_mean,dec_logvar = self.decoder(tgt, memory, memory_key_padding_mask=mask,
-                          pos=pos_embed, query_pos=query_embed)
+                          pos=pos_embed, query_pos=memory)
         return (dec_mean,dec_logvar), memory, (mean, logvar)
 
 

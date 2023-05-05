@@ -121,71 +121,80 @@ def train_1epoch(args, model, dataset, optimizer, device):
 
     prev_data = torch.tensor(np.zeros((dataset.batch_size, model.embedder._input_dim, 4)), dtype=torch.float64, device=device)
     for batch in dataset:
-        for tp, cat, val, cat_m, val_m, t_cat, t_val in zip(batch['tp'], batch['cat'], batch['val'], batch['cat_msk'], batch['val_msk'], batch['true_cat'], batch['true_val']):
-            # if len(tp) == 1:
-            #     continue
-            # if ~cat_m.all():
-            #     continue
-            np.nan_to_num(cat, nan=0, copy=False)
-            np.nan_to_num(val, nan=0, copy=False)
-            np.nan_to_num(t_cat, nan=0, copy=False)
-            np.nan_to_num(t_val, nan=0, copy=False)
+        tp, cat, val, cat_m, val_m, t_cat, t_val = batch['tp'], batch['cat'], batch['val'], batch['cat_msk'], batch['val_msk'], batch['true_cat'], batch['true_val']
+        cat = np.moveaxis(cat, [0, 1], [1, 0])
+        val = np.moveaxis(val, [0, 1], [1, 0])
+        cat_m = np.moveaxis(cat_m, [0, 1], [1, 0])
+        val_m = np.moveaxis(val_m, [0, 1], [1, 0])
+        t_cat = np.moveaxis(t_cat, [0, 1], [1, 0])
+        t_val = np.moveaxis(t_val, [0, 1], [1, 0])
+        # if len(tp) == 1:
+        #     continue
+        # if ~cat_m.all():
+        #     continue
+        np.nan_to_num(cat, nan=0, copy=False)
+        np.nan_to_num(val, nan=0, copy=False)
+        np.nan_to_num(t_cat, nan=0, copy=False)
+        np.nan_to_num(t_val, nan=0, copy=False)
 
-            batch_size, feat_cnt = val.shape
-            if batch_size != 128:
-                continue
+        batch_size, seq_len, feat_cnt = val.shape
+        # if batch_size != 128:
+        #     continue
 
-            
-            assert feat_cnt == 22
-            assert batch_size == 128
+        
+        # assert feat_cnt == 22
+        # assert batch_size == 128
 
-            optimizer.zero_grad()
-            cat, val, cat_m, val_m = (to_cat_seq(cat), val, cat_m, val_m)
+        optimizer.zero_grad()
+        cat, val, cat_m, val_m = (to_cat_seq(cat), val, cat_m, val_m)
 
-            
-            data = np.zeros((batch_size, model.embedder._input_dim, 4))
+        
+        # data = np.zeros((batch_size, model.embedder._input_dim, 4))
 
-            data[:,0,:3] = cat.squeeze()
-            data[:,1:,0] = val.squeeze()
-            data[:,0,3] = cat_m.squeeze()
-            data[:,1:,3] = val_m.squeeze()
-            
-            data_np = data
-            
-            data = torch.tensor(data, dtype=torch.float64, device=device)
-            (dec_mean, dec_logvar), enc_samples, (enc_mean, enc_logvar) = model(data, prev_data)
-            
-            t_cat = to_cat_seq(t_cat).squeeze()
-            t_cat = torch.tensor(t_cat, dtype=torch.float64, device=device)
-            t_val = torch.tensor(t_val, dtype=torch.float64, device=device)
+        # data[:,0,:3] = cat.squeeze()
+        # data[:,1:,0] = val.squeeze()
+        # data[:,0,3] = cat_m.squeeze()
+        # data[:,1:,3] = val_m.squeeze()
+        features_to_concatenate = list(map(torch.tensor, [cat, val, cat_m, val_m]))
+        
+        data = torch.cat(features_to_concatenate, dim=-1)
+        
+        data_np = data
+        
+        data = data.double().to(device)
+        (dec_mean, dec_logvar), enc_samples, (enc_mean, enc_logvar) = model(data, prev_data)
+        
+        t_cat = to_cat_seq(t_cat).squeeze()
+        t_cat = torch.tensor(t_cat, dtype=torch.float64, device=device)
+        t_val = torch.tensor(t_val, dtype=torch.float64, device=device)
 
-            t_cat = torch.nan_to_num(t_cat, nan=0)    # ravi: TODO: check this
-            t_val = torch.nan_to_num(t_val, nan=0)
+        t_cat = torch.nan_to_num(t_cat, nan=0)    # ravi: TODO: check this
+        t_val = torch.nan_to_num(t_val, nan=0)
 
-            cat_m = torch.tensor(cat_m, dtype=torch.float64, device=device)
-            val_m = torch.tensor(val_m, dtype=torch.float64, device=device)
+        cat_m = torch.tensor(cat_m, dtype=torch.float64, device=device)
+        val_m = torch.tensor(val_m, dtype=torch.float64, device=device)
 
-            kl = kl_divergence((enc_mean, enc_logvar)).mean()
+        kl = kl_divergence((enc_mean, enc_logvar)).mean()
 
-            nll = negative_log_likelihood((t_val, t_cat), dec_mean, dec_logvar, alpha=1, mask=(val_m, cat_m))
+        nll = negative_log_likelihood((t_val, t_cat), dec_mean, dec_logvar, alpha=1, mask=(val_m, cat_m))
 
-            # mask_cat = batch['cat_msk'][1:]
-            # # assert mask_cat.sum() > 0
+        # mask_cat = batch['cat_msk'][1:]
+        # # assert mask_cat.sum() > 0
 
-            # ent = ent_loss(pred_cat, batch['true_cat'][1:], mask_cat)
-            # mae = mae_loss(pred_val, batch['true_val'][1:], batch['val_msk'][1:])
-            total_loss = 0*kl + args.w_ent * nll
+        # ent = ent_loss(pred_cat, batch['true_cat'][1:], mask_cat)
+        # mae = mae_loss(pred_val, batch['true_val'][1:], batch['val_msk'][1:])
+        total_loss = kl + args.w_ent * nll
 
-            total_loss.backward()
+        total_loss.backward()
 
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), 0)
-            optimizer.step()
+        # torch.nn.utils.clip_grad_norm_(model.parameters(), 0)
+        optimizer.step()
 
-            batch_size = cat_m.shape[0]
-            total_kl += kl.item() 
-            total_nll += nll.item()
-            
-            prev_data = data
+        batch_size = cat_m.shape[0]
+        total_kl += kl.item() 
+        total_nll += nll.item()
+        
+        prev_data = None
 
     return total_kl / len(dataset.subjects), total_nll / len(dataset.subjects)
 
@@ -237,8 +246,8 @@ def train(args):
         model = torch.load(args.load)
 
     model = model.double()
-    setattr(model, 'min', data['min'])
-    setattr(model, 'max', data['max'])
+    setattr(model, 'mean', data['mean'])
+    setattr(model, 'stds', data['stds'])
 
     model.to(device)
     log(model)

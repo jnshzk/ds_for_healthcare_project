@@ -13,7 +13,7 @@ import misc as misc
 from tqdm import tqdm
 
 
-def predict_subject(model, cat_seq, value_seq, time_seq):
+def predict_subject(model, cat_seq, value_seq, time_seq, device):
     """
     Predict Alzheimer’s disease progression for a subject
     Args:
@@ -32,20 +32,31 @@ def predict_subject(model, cat_seq, value_seq, time_seq):
     in_cat = np.full((len(time_seq), ) + cat_seq.shape[1:], np.nan)
     in_cat[:len(cat_seq)] = cat_seq
 
-    batch_size, _, _ = in_val.shape
-    
-    data = np.zeros((batch_size+1, model.embedder._input_dim, 4))
+    in_val = np.moveaxis(in_val, [0, 1], [1, 0])
+    in_cat = np.moveaxis(in_cat, [0, 1], [1, 0])
 
-    cat_m = (np.isnan(in_cat).squeeze().sum(axis=1) > 2).astype(int)
+    batch_size, seq_len, _ = in_val.shape
+    
+    cat_m = (np.isnan(in_cat).sum(axis=-1) > 2)[:,:,None].astype(int)
     val_m = np.isnan(in_val).astype(int)
 
     in_cat = np.nan_to_num(in_cat, 0)
     in_val = np.nan_to_num(in_val, 0)
 
-    data[1:,0,:3] = in_cat.squeeze()
-    data[1:,1:,0] = in_val.squeeze()
-    data[1:,0,3] = cat_m.squeeze()
-    data[1:,1:,3] = val_m.squeeze()
+    features_to_concatenate = list(map(torch.tensor, [in_cat, in_val, cat_m, val_m]))
+        
+    data = torch.cat(features_to_concatenate, dim=-1).double().to(device)
+    # data = np.zeros((batch_size+1, model.embedder._input_dim, 4))
+
+    # cat_m = (np.isnan(in_cat).squeeze().sum(axis=1) > 2).astype(int)
+    # val_m = np.isnan(in_val).astype(int)
+
+    # 
+
+    # data[1:,0,:3] = in_cat.squeeze()
+    # data[1:,1:,0] = in_val.squeeze()
+    # data[1:,0,3] = cat_m.squeeze()
+    # data[1:,1:,3] = val_m.squeeze()
     
     serial = False
     if serial:
@@ -63,26 +74,32 @@ def predict_subject(model, cat_seq, value_seq, time_seq):
                 cat_preds.append(list(dec_mean[0,0,:3].detach().cpu().softmax(-1)))
                 cont_preds.append(list(dec_mean[0,1:,0].detach().cpu().sigmoid()))
     else:
-        curr_data = torch.tensor(data[1:]).double().to(model.embedder._embedding_weights.device)
-        prev_data = torch.tensor(data[:-1]).double().to(model.embedder._embedding_weights.device)
+        curr_data = data
+        prev_data = None
         with torch.no_grad():
             (dec_mean, dec_logvar), enc_samples, (enc_mean, enc_logvar) = model(curr_data, prev_data)
         
-        cat_preds = dec_mean[:,0,:3].detach().cpu().softmax(-1)
-        cont_preds = dec_mean[:,1:,0].detach().cpu().sigmoid()
+        cont_preds = (dec_mean[:,:,3:25]*dec_mean[:,:,-22:]).sigmoid()
+        cat_preds = (dec_mean[:,:,:3]* dec_mean[:,:,25][:,:,None]).softmax(-1)
 
-    out_cat = np.array(cat_preds)
-    out_val = np.array(cont_preds)
+        # cat_preds = dec_mean[:,0,:3].detach().cpu().softmax(-1)
+        # cont_preds = dec_mean[:,1:,0].detach().cpu().sigmoid()
 
-    out_cat = np.expand_dims(out_cat, 1)
-    out_val = np.expand_dims(out_val, 1)
+    out_cat = np.array(cat_preds.detach().cpu())
+    out_val = np.array(cont_preds.detach().cpu())
+
+    # out_cat = np.expand_dims(out_cat, 1)
+    # out_val = np.expand_dims(out_val, 1)
+
+    out_val = np.moveaxis(out_val, [0, 1], [1, 0])
+    out_cat = np.moveaxis(out_cat, [0, 1], [1, 0])
 
     assert out_cat.shape[1] == out_val.shape[1] == 1
 
     return out_cat, out_val
 
 
-def predict(model, dataset, pred_start, duration, baseline):
+def predict(model, dataset, pred_start, duration, baseline, device):
     """
     Predict Alzheimer’s disease progression using a trained model
     Args:
@@ -108,8 +125,8 @@ def predict(model, dataset, pred_start, duration, baseline):
 
     col = ['ADAS13', 'Ventricles', 'ICV']
     indices = misc.get_index(list(dataset.value_fields()), col)
-    min = model.min[col].values.reshape(1, -1)
-    max = model.max[col].values.reshape(1, -1)
+    mean = model.mean[col].values.reshape(1, -1)
+    std = model.stds[col].values.reshape(1, -1)
 
     for data in tqdm(dataset):
         rid = data['rid']
@@ -122,8 +139,8 @@ def predict(model, dataset, pred_start, duration, baseline):
             [misc.to_categorical(c, 3) for c in data['cat'][mask]])
         ival = data['val'][:, None, :][mask]
 
-        ocat, oval = predict_subject(model, icat, ival, itime)
-        oval = oval[-duration:, 0, indices] * (max-min) + min
+        ocat, oval = predict_subject(model, icat, ival, itime, device)
+        oval = oval[-duration:, 0, indices] * std + mean
 
         ret['DX'].append(ocat[-duration:, 0, :])
         ret['ADAS13'].append(misc.add_ci_col(oval[:, 0], 1, 0, 85))
@@ -160,7 +177,7 @@ def main(args):
         data = pickle.load(fhandler)
 
     prediction = predict(model, data['test'], data['pred_start'],
-                         data['duration'], data['baseline'])
+                         data['duration'], data['baseline'], device)
     misc.build_pred_frame(prediction, args.out)
 
 

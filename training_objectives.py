@@ -224,10 +224,11 @@ def negative_log_likelihood(
     # all elements of each type here, to make it easier to collect everything in a single nlls tensor.
     feature_sum_type = "cols" if sum_type is not None else None
 
-    cont_mean = decoder_mean[:,1:,0].sigmoid()
-    cont_logvar = decoder_logvar[:,1:,0].sigmoid()
+    
+    cont_mean = (decoder_mean[:,:,3:25]*decoder_mean[:,:,-22:])
+    cont_logvar = decoder_logvar[:,:,3:25]
 
-    cat_mean = decoder_mean[:,0,:3].squeeze().softmax(-1)
+    cat_mean = (decoder_mean[:,:,:3]* decoder_mean[:,:,25].view(list(decoder_mean.shape[:-1])+[1])).squeeze().softmax(-1)
     #cat_logvar = decoder_mean[:,0,:3].squeeze()
 
     continuous_idxs_nlls = gaussian_negative_log_likelihood(

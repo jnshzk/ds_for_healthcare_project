@@ -61,8 +61,6 @@ class FeatureEmbedder(torch.nn.Module):
         # )
 
         # ravi self._embedding_bias = torch.nn.Parameter(torch.zeros(input_dim, 1, device=device), requires_grad=True)
-        
-        self._embedding_weights = positionalencoding1d(embedding_dim, input_dim)
         self.zeros = torch.zeros(input_dim, 1)
         # torch.nn.init.xavier_uniform_(self._embedding_weights)
         # torch.nn.init.xavier_uniform_(self._embedding_bias)
@@ -91,12 +89,13 @@ class FeatureEmbedder(torch.nn.Module):
             feature_embedded_x (torch.Tensor): of shape (batch_size * input_dim, output_dim)
         """
         # cat, val, cm, vm = x
-        batch_size, _, _ = x.shape  # Shape (batch_size, input_dim).
+        batch_size, seq_len, feat_dim = x.shape  # Shape (batch_size, input_dim).
         # cat_flat = cat#.reshape(batch_size * self._input_dim, 1)
         # val_flat = val#.reshape(batch_size * self._input_dim, 1)
         # cm_flat = cm#.reshape(batch_size * self._input_dim, 1)
         # vm_flat = vm#.reshape(batch_size * self._input_dim, 1)
 
+        self._embedding_weights = positionalencoding1d(feat_dim, seq_len)
         # Repeat weights and bias for each instance of each feature.
         if self._metadata is not None:
             embedding_weights_and_metadata = torch.cat((self._embedding_weights, self._metadata), dim=1)
@@ -105,32 +104,34 @@ class FeatureEmbedder(torch.nn.Module):
             repeat_embedding_weights = self._embedding_weights.repeat([batch_size, 1, 1])
 
         # Shape (batch_size * input_dim, embedding_dim)
-        repeat_embedding_weights = repeat_embedding_weights.reshape([batch_size * self._input_dim, -1]).to(x.device)
+        #repeat_embedding_weights = repeat_embedding_weights.reshape([batch_size * self._input_dim, -1]).to(x.device)
+        repeat_embedding_weights = repeat_embedding_weights.to(x.device)
 
         # ravi
         # repeat_embedding_bias = self._embedding_bias.repeat((batch_size, 1, 1))
         # repeat_embedding_bias = repeat_embedding_bias.reshape((batch_size * self._input_dim, 1))
 
-        X_flat = x.reshape((batch_size*self._input_dim), -1)
+        # X_flat = x.reshape((batch_size*self._input_dim), -1)
 
-        if self._multiply_weights:
-            pass
-            # features_to_concatenate = [
-            #     x_flat,
-            #     x_flat * repeat_embedding_weights,
-            #     repeat_embedding_bias,
-            # ]
-        else:
-            features_to_concatenate = [
-                X_flat,
-                repeat_embedding_weights,
-                #repeat_embedding_bias, ravi
-            ]
+        # if self._multiply_weights:
+        #     pass
+        #     # features_to_concatenate = [
+        #     #     x_flat,
+        #     #     x_flat * repeat_embedding_weights,
+        #     #     repeat_embedding_bias,
+        #     # ]
+        # else:
+        #     features_to_concatenate = [
+        #         X_flat,
+        #         repeat_embedding_weights,
+        #         #repeat_embedding_bias, ravi
+        #     ]
 
-        # Shape (batch_size*input_dim, output_dim)
-        feature_embedded_x = torch.cat(features_to_concatenate, dim=1)
-        feature_embedded_x = feature_embedded_x.reshape((batch_size, self._input_dim, -1))
-        return feature_embedded_x
+        # # Shape (batch_size*input_dim, output_dim)
+        # feature_embedded_x = torch.cat(features_to_concatenate, dim=1)
+        # feature_embedded_x = feature_embedded_x.reshape((batch_size, self._input_dim, -1))
+        op = x+repeat_embedding_weights
+        return op #feature_embedded_x
 
     def __repr__(self):
         return f"FeatureEmbedder(input_dim={self._input_dim}, embedding_dim={self._embedding_dim}, multiply_weights={self._multiply_weights}, output_dim={self.output_dim})"
