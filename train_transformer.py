@@ -124,8 +124,13 @@ def train_1epoch(args, model, dataset, optimizer, device):
         for tp, cat, val, cat_m, val_m, t_cat, t_val in zip(batch['tp'], batch['cat'], batch['val'], batch['cat_msk'], batch['val_msk'], batch['true_cat'], batch['true_val']):
             # if len(tp) == 1:
             #     continue
-            if ~cat_m.all():
-                continue
+            # if ~cat_m.all():
+            #     continue
+            np.nan_to_num(cat, nan=0, copy=False)
+            np.nan_to_num(val, nan=0, copy=False)
+            np.nan_to_num(t_cat, nan=0, copy=False)
+            np.nan_to_num(t_val, nan=0, copy=False)
+
             batch_size, feat_cnt = val.shape
             if batch_size != 128:
                 continue
@@ -164,16 +169,12 @@ def train_1epoch(args, model, dataset, optimizer, device):
 
             nll = negative_log_likelihood((t_val, t_cat), dec_mean, dec_logvar, alpha=1, mask=(val_m, cat_m))
 
-
-
-
-
             # mask_cat = batch['cat_msk'][1:]
             # # assert mask_cat.sum() > 0
 
             # ent = ent_loss(pred_cat, batch['true_cat'][1:], mask_cat)
             # mae = mae_loss(pred_val, batch['true_val'][1:], batch['val_msk'][1:])
-            total_loss = kl + args.w_ent * nll
+            total_loss = 0*kl + args.w_ent * nll
 
             total_loss.backward()
 
@@ -232,11 +233,13 @@ def train(args):
     #     h_drop=args.h_drop,
     #     i_drop=args.i_drop)
     model = Transformer()
+    if args.load is not None:
+        model = torch.load(args.load)
+
     model = model.double()
     setattr(model, 'min', data['min'])
     setattr(model, 'max', data['max'])
 
-    
     model.to(device)
     log(model)
 
@@ -268,6 +271,7 @@ def get_args():
     parser.add_argument('--lr', type=float, required=True)
     parser.add_argument('--w_ent', type=float, default=1.)
 
+    parser.add_argument("--load", required=False, default=None)
     parser.add_argument('--nb_layers', type=int, default=1)
     parser.add_argument('--h_size', type=int, default=512)
     parser.add_argument('--i_drop', type=float, default=.0)

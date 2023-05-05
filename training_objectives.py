@@ -112,7 +112,7 @@ def categorical_negative_log_likelihood(
         if `sum_type=='all'`, shape (1, num_vars) if `sum_type=='cols'` or a scalar if `sum_type is None`.
     """
     assert sum_type in [None, "cols", "all"]
-    predicted_dist = tdist.OneHotCategorical(logits=mean)
+    predicted_dist = tdist.OneHotCategorical(probs=mean)
     # if mask is not None:
     #     mask = mask[:, 0]  # We only need one value for the mask, so don't use the extra dim.
     nll = get_nll_from_dist(predicted_dist, targets, mask, sum_type=sum_type)
@@ -131,9 +131,9 @@ def get_nll_from_dist(
     if mask is not None:
         log_prob *= mask
     if sum_type == "all":
-        nll = -1 * log_prob.mean()
+        nll = -1 * log_prob.sum()
     elif sum_type == "cols":
-        nll = -1 * log_prob.mean(axis=0)
+        nll = -1 * log_prob.sum(axis=0)
     else:
         nll = -1 * log_prob
     return nll
@@ -224,10 +224,10 @@ def negative_log_likelihood(
     # all elements of each type here, to make it easier to collect everything in a single nlls tensor.
     feature_sum_type = "cols" if sum_type is not None else None
 
-    cont_mean = decoder_mean[:,1:,0]
-    cont_logvar = decoder_logvar[:,1:,0]
+    cont_mean = decoder_mean[:,1:,0].sigmoid()
+    cont_logvar = decoder_logvar[:,1:,0].sigmoid()
 
-    cat_mean = decoder_mean[:,0,:3].squeeze()
+    cat_mean = decoder_mean[:,0,:3].squeeze().softmax(-1)
     #cat_logvar = decoder_mean[:,0,:3].squeeze()
 
     continuous_idxs_nlls = gaussian_negative_log_likelihood(
@@ -247,7 +247,7 @@ def negative_log_likelihood(
     )
     # Now sum everything if returning total sum.
     if sum_type == "all":
-        nll = continuous_idxs_nlls.mean()+cat_idx_nlls.mean()
+        nll = continuous_idxs_nlls.sum()+cat_idx_nlls.sum()
 
     return nll
 

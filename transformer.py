@@ -14,14 +14,17 @@ import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
 import torch.distributions as tdist
-
+import math
 from feature_embedder import FeatureEmbedder
+
+
+
 
 
 class Transformer(nn.Module):
 
-    def __init__(self, d_model=32, nhead=4, num_encoder_layers=2,
-                 num_decoder_layers=2, dim_feedforward=128, dropout=0.1,
+    def __init__(self, d_model=16, nhead=2, num_encoder_layers=2,
+                 num_decoder_layers=2, dim_feedforward=64, dropout=0.1,
                  activation="relu", normalize_before=False,
                  return_intermediate_dec=False):
         super().__init__()
@@ -37,7 +40,7 @@ class Transformer(nn.Module):
         self.decoder = TransformerDecoder(decoder_layer, num_decoder_layers, d_model, decoder_norm,
                                           return_intermediate=return_intermediate_dec)
 
-        self.embedder = FeatureEmbedder(23, 27)
+        self.embedder = FeatureEmbedder(23, d_model-4)
         self._reset_parameters()
 
         self.d_model = d_model

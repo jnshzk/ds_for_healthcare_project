@@ -2,7 +2,26 @@ from typing import Optional
 
 import torch
 import numpy as np
+import math
 
+
+def positionalencoding1d(d_model, length):
+    """
+    :param d_model: dimension of the model
+    :param length: length of positions
+    :return: length*d_model position matrix
+    """
+    if d_model % 2 != 0:
+        raise ValueError("Cannot use sin/cos positional encoding with "
+                         "odd dim (got dim={:d})".format(d_model))
+    pe = torch.zeros(length, d_model)
+    position = torch.arange(0, length).unsqueeze(1)
+    div_term = torch.exp((torch.arange(0, d_model, 2, dtype=torch.float) *
+                         -(math.log(10000.0) / d_model)))
+    pe[:, 0::2] = torch.sin(position.float() * div_term)
+    pe[:, 1::2] = torch.cos(position.float() * div_term)
+
+    return pe
 
 
 class FeatureEmbedder(torch.nn.Module):
@@ -37,13 +56,16 @@ class FeatureEmbedder(torch.nn.Module):
         self._metadata = metadata
         self._multiply_weights = multiply_weights
 
-        self._embedding_weights = torch.nn.Parameter(
-            torch.zeros(input_dim, embedding_dim, device=device), requires_grad=True
-        )
-        self._embedding_bias = torch.nn.Parameter(torch.zeros(input_dim, 1, device=device), requires_grad=True)
+        # ravi self._embedding_weights = torch.nn.Parameter(
+        #     torch.zeros(input_dim, embedding_dim, device=device), requires_grad=True
+        # )
+
+        # ravi self._embedding_bias = torch.nn.Parameter(torch.zeros(input_dim, 1, device=device), requires_grad=True)
+        
+        self._embedding_weights = positionalencoding1d(embedding_dim, input_dim)
         self.zeros = torch.zeros(input_dim, 1)
-        torch.nn.init.xavier_uniform_(self._embedding_weights)
-        torch.nn.init.xavier_uniform_(self._embedding_bias)
+        # torch.nn.init.xavier_uniform_(self._embedding_weights)
+        # torch.nn.init.xavier_uniform_(self._embedding_bias)
 
     @property
     def output_dim(self) -> int:
@@ -83,10 +105,11 @@ class FeatureEmbedder(torch.nn.Module):
             repeat_embedding_weights = self._embedding_weights.repeat([batch_size, 1, 1])
 
         # Shape (batch_size * input_dim, embedding_dim)
-        repeat_embedding_weights = repeat_embedding_weights.reshape([batch_size * self._input_dim, -1])
+        repeat_embedding_weights = repeat_embedding_weights.reshape([batch_size * self._input_dim, -1]).to(x.device)
 
-        repeat_embedding_bias = self._embedding_bias.repeat((batch_size, 1, 1))
-        repeat_embedding_bias = repeat_embedding_bias.reshape((batch_size * self._input_dim, 1))
+        # ravi
+        # repeat_embedding_bias = self._embedding_bias.repeat((batch_size, 1, 1))
+        # repeat_embedding_bias = repeat_embedding_bias.reshape((batch_size * self._input_dim, 1))
 
         X_flat = x.reshape((batch_size*self._input_dim), -1)
 
@@ -101,7 +124,7 @@ class FeatureEmbedder(torch.nn.Module):
             features_to_concatenate = [
                 X_flat,
                 repeat_embedding_weights,
-                repeat_embedding_bias,
+                #repeat_embedding_bias, ravi
             ]
 
         # Shape (batch_size*input_dim, output_dim)
